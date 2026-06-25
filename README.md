@@ -1,4 +1,7 @@
-## 中文说明
+## 今日科研
+<p align="center">
+  <img src="SciToday_logo.svg" alt="SciToday logo" width="140">
+</p>
 
 SciToday 是一个个人科研阅读助手，由 Android App 和可选的 Windows PC 后端组成：
 
@@ -112,10 +115,6 @@ PDF 摘要质量取决于 PDF 文本层。扫描版图片 PDF 可能需要先 OC
 - `cloudflared.exe` 是第三方二进制文件，不提交到本仓库。
 
 # SciToday
-
-<p align="center">
-  <img src="SciToday_logo.svg" alt="SciToday logo" width="140">
-</p>
 
 SciToday is a personal research reading assistant. It combines an Android app with an optional Windows PC backend:
 
