@@ -238,11 +238,6 @@ PDF 摘要质量取决于 PDF 文本层。扫描版图片 PDF 可能需要先 OC
 - 离线安装包如打包 wheel 缓存，会受到 Python 版本影响。
 - `cloudflared.exe` 是第三方二进制文件，不提交到本仓库。
 
-## Contributors
-
-- [hhhHarding](https://github.com/hhhHarding)
-- OpenAI Codex
-
 ## License
 
 SciToday is released under the repository license, GPL-3.0.
