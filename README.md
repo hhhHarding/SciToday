@@ -1,7 +1,7 @@
 ## 今日科研
 
 <p align="center">
-  <img src="SciToday_logo.svg" alt="SciToday logo" width="140">
+  <img src="SciToday_logo.svg" alt="SciToday logo" width="200">
 </p>
 
 SciToday 是一个个人科研阅读助手，由 Android App 和可选的 Windows PC 后端组成：
