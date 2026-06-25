@@ -1,0 +1,26 @@
+# Android / Gradle
+app/.gradle/
+app/.kotlin/
+app/build/
+app/app/build/
+**/build/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+
+# Local config (机器特定，不应提交)
+app/local.properties
+local.properties
+*.iml
+.idea/
+
+# Signing (绝不提交密钥)
+*.jks
+*.keystore
+keystore.properties
+
+# OS
+.DS_Store
+Thumbs.db
