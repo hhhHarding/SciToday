@@ -1,0 +1,30 @@
+{
+  "ai": {
+    "api_key": "",
+    "base_url": "https://api.deepseek.com",
+    "model": "deepseek-chat",
+    "system_prompt": "你是严谨的科研论文阅读助理。必须基于输入信息总结，不能编造。",
+    "rss_prompt": "请基于 RSS 条目信息生成中文论文摘要。只能使用输入中明确给出的信息，缺失信息请写未提供。",
+    "pdf_prompt": "请基于 PDF 正文片段生成中文全文摘要。只能使用 PDF 文本中的信息，不能编造。"
+  },
+  "rss": {
+    "opml_path": "C:\\Users\\YOUR_NAME\\SciTodayData\\feedly.opml",
+    "per_feed_limit": 3,
+    "max_push_items": 20
+  },
+  "schedule": {
+    "rss_discovery_interval_minutes": 10,
+    "rss_interval_minutes": 30,
+    "pdf_interval_minutes": 5,
+    "enabled": true
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 5200,
+    "auth_token": "CHANGE_ME_TO_A_LONG_RANDOM_TOKEN"
+  },
+  "pc": {
+    "tunnel_mode": "quick",
+    "cloudflare_tunnel_url": ""
+  }
+}

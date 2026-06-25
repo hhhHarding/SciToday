@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="blueMetal" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a2540" />
+      <stop offset="50%" stop-color="#004080" />
+      <stop offset="100%" stop-color="#05162a" />
+    </linearGradient>
+    
+    <filter id="dropShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="url(#blueMetal)" />
+
+  <g transform="translate(256, 260)" text-anchor="middle" filter="url(#dropShadow)">
+    <text y="0" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#FFFFFF">
+      <tspan font-weight="800" font-size="76" letter-spacing="-1">Sci</tspan>
+      <tspan font-weight="200" font-size="76" letter-spacing="0">Today</tspan>
+    </text>
+    
+    <line x1="-150" y1="25" x2="150" y2="25" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" opacity="0.9" />
+  </g>
+</svg>

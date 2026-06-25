@@ -10,16 +10,47 @@ app/app/build/
 *.dex
 *.class
 
-# Local config (机器特定，不应提交)
+# Local config
 app/local.properties
 local.properties
 *.iml
 .idea/
 
-# Signing (绝不提交密钥)
+# Signing keys
 *.jks
 *.keystore
 keystore.properties
+
+# Python / PC backend
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+pc_backend/.venv/
+
+# PC backend runtime data and secrets
+pc_backend/config.json
+pc_backend/tray_config.env
+pc_backend/quick_tunnel.json
+pc_backend/quick_tunnel.log
+pc_backend/tray_command.json
+pc_backend/Data/
+pc_backend/inbox/
+pc_backend/uploaded_pdfs/
+pc_backend/*.db
+pc_backend/*.log
+pc_backend/failed_pushes*/
+pc_backend/dist/
+pc_backend/wheels/
+
+# Build outputs / binaries
+dist/
+*.exe
+*.zip
+*.msi
+*.whl
+cloudflared.exe
 
 # OS
 .DS_Store

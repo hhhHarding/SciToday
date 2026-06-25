@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SciToday 控制台</title>
+  <link rel="icon" href="/admin/SciToday_logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/admin/styles.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand"><strong>Sci</strong><span>Today</span></div>
+    <button class="nav active" data-view="dashboard">总览</button>
+    <button class="nav" data-view="messages">RSS 消息</button>
+    <button class="nav" data-view="reading">PDF 阅读</button>
+    <button class="nav" data-view="feeds">RSS 源</button>
+    <button class="nav" data-view="settings">设置</button>
+    <button class="nav" data-view="monitor">监控</button>
+    <button class="nav" data-view="logs">日志</button>
+  </aside>
+
+  <main>
+    <header>
+      <div>
+        <h1 id="pageTitle">总览</h1>
+        <p id="subtitle">PC 后端、本地数据库、App 心跳和 Tunnel 状态</p>
+      </div>
+    </header>
+
+    <section id="loginPanel" class="panel hidden">
+      <h2>访问 Token</h2>
+      <div class="row">
+        <input id="tokenInput" type="password" placeholder="输入与 App 相同的后端 token">
+        <button id="saveTokenBtn">保存并登录</button>
+      </div>
+    </section>
+
+    <section id="dashboard" class="view"></section>
+    <section id="messages" class="view hidden"></section>
+    <section id="reading" class="view hidden"></section>
+    <section id="feeds" class="view hidden"></section>
+    <section id="settings" class="view hidden"></section>
+    <section id="monitor" class="view hidden"></section>
+    <section id="logs" class="view hidden"></section>
+  </main>
+
+  <dialog id="detailDialog">
+    <div class="dialogHeader">
+      <h2 id="detailTitle">摘要</h2>
+      <button id="closeDetailBtn">关闭</button>
+    </div>
+    <iframe id="digestFrame" title="digest"></iframe>
+    <div class="chat">
+      <textarea id="chatInput" rows="3" placeholder="针对这篇摘要或 PDF 提问"></textarea>
+      <button id="chatSendBtn">发送</button>
+    </div>
+    <pre id="chatOutput"></pre>
+  </dialog>
+
+  <script src="/admin/admin.js"></script>
+</body>
+</html>
