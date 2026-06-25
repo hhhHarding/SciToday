@@ -238,11 +238,6 @@ PDF extraction quality depends on the PDF text layer. Scanned image-only PDFs ma
 - `cloudflared.exe` is a third-party binary and is not committed to this repository.
 - Legacy Termux helper scripts are kept for migration/debug use, but the main open-source PC backend path is Windows.
 
-## Contributors
-
-- [hhhHarding](https://github.com/hhhHarding)
-- [OpenAI Codex](https://openai.com/codex/)
-
 ## License
 
 SciToday is released under the repository license, GPL-3.0.
