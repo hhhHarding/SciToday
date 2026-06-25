@@ -6,7 +6,7 @@
       <stop offset="100%" stop-color="#05162a" />
     </linearGradient>
     
-    <filter id="dropShadow" x="-10%" y="-10%" width="120%" height="120%">
+    <filter id="dropShadow" x="20%" y="20%" width="90%" height="90%">
       <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#000" flood-opacity="0.3"/>
     </filter>
   </defs>
