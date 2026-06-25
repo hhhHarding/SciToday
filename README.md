@@ -14,7 +14,7 @@ SciToday 是一个个人科研阅读助手，由 Android App 和可选的 Window
 本仓库不会内置 API Key、后端 Token、本地数据库、日志、私人 RSS 数据、PDF 或生成后的安装包。
 
 
-**### 写在前面**
+### 写在前面
 
 **由于作者开发功底有限，本项目大量借助 AI 大模型及 Agent 工具，包括但不限于 Codex，Claude Code，MiMO，GLM 和 Deepssek 等。**
 
