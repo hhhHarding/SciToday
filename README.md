@@ -93,6 +93,12 @@ By default the package does not bundle a Python wheel cache, so it can install d
 
 Generated package files are written to `pc_backend/dist/` and are ignored by Git. Public releases should attach ZIP packages and APK files as GitHub Release assets rather than committing binaries to the repository. Self-extracting installer EXE files are no longer generated for public releases.
 
+## Android APK
+
+Download `SciToday-App-V1.0.1.apk` from the GitHub Release and install it by Android side-loading. This APK is debug-signed for direct GitHub distribution and is not intended for app-store submission.
+
+If Android blocks installation from the browser or file manager, allow installation from that source in Android system settings, then open the APK again.
+
 ## Connect Android App To PC Backend
 
 1. Start the Windows backend.
@@ -225,6 +231,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\pc_backend\installer\build
 ```
 
 默认构建不会打包 Python wheel 缓存，而是在目标机器上联网安装依赖，减少 Python 版本不兼容问题。只有在确认目标环境和构建环境的 Windows x64/Python 版本一致时，才建议使用 `-IncludeWheelCache` 构建离线包。公开 Release 不再生成或上传自解压 EXE 安装器。
+
+### 安装 Android APK
+
+从 GitHub Release 下载 `SciToday-App-V1.0.1.apk`，通过 Android 侧载安装。本 APK 使用 debug 签名，面向 GitHub 直接分发，不用于应用商店提交。
+
+如果 Android 阻止浏览器或文件管理器安装应用，请在系统设置中允许该来源安装应用，然后重新打开 APK。
 
 ### Android App 连接 PC 后端
 
