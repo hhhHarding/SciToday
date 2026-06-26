@@ -1,0 +1,26 @@
+# Local runtime files
+config.json
+tray_config.env
+quick_tunnel.json
+quick_tunnel.log
+tray_command.json
+Data/
+inbox/
+uploaded_pdfs/
+*.db
+*.log
+failed_pushes*/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+
+# Build outputs and binaries
+dist/
+wheels/
+*.exe
+*.zip
+*.msi
+*.whl
+cloudflared.exe
