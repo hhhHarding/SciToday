@@ -1,5 +1,5 @@
 param(
-    [string]$DataDir = "$env:USERPROFILE\SciTodayData",
+    [string]$DataDir = "$env:USERPROFILE\RssAiPushData",
     [string]$DevicePath = "/storage/emulated/0/RssAiPush"
 )
 

@@ -41,6 +41,19 @@ data class RunResponse(
 )
 
 @JsonClass(generateAdapter = true)
+data class AppHeartbeatRequest(
+    val appVersion: String = "",
+    val backendMode: String = "",
+    val baseUrl: String = "",
+    val reason: String = "",
+    val downloadTreeGranted: Boolean = false,
+    val lastEvent: String = "",
+    val lastStatus: String = "",
+    val lastError: String = "",
+    val timestampMs: Long = 0L
+)
+
+@JsonClass(generateAdapter = true)
 data class ClearResponse(
     val ok: Boolean = false,
     val count: Int = 0

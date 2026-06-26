@@ -23,6 +23,7 @@ data class DigestFeedUiState(
     val progressLabel: String = "",
     val notice: String? = null,
     val error: String? = null,
+    val groupByJournal: Boolean = true,
 )
 
 /**
@@ -47,12 +48,16 @@ abstract class DigestFeedViewModel(
     private var pendingTrigger = false
     private var pendingPolls = 0
     private var pollingJob: kotlinx.coroutines.Job? = null
+    private var triggerJob: kotlinx.coroutines.Job? = null
 
     // 连续两次下拉刷新（间隔 < 3 秒）触发后端强制抓取/扫描。
     private var lastPullElapsed = 0L
 
-    /** 子类指定手动触发的端点（runRss / runPdf）。 */
-    protected abstract suspend fun triggerTask(): Result<Unit>
+    /** 子类指定手动触发的端点（runRss / runPdf），返回可展示的结果提示。 */
+    protected abstract suspend fun triggerTask(): Result<String>
+
+    /** PDF 页下拉刷新时应直接扫描/上传，RSS 页仍用二次下拉触发强制抓取。 */
+    protected open val triggerOnPullRefresh: Boolean = false
 
     /** 子类从整体进度里挑出本屏关注的任务（消息页含 rss+pdf，阅读页仅 pdf）。 */
     protected abstract fun relevantProgress(p: ProgressResponse): Pair<TaskProgress?, String>
@@ -60,7 +65,7 @@ abstract class DigestFeedViewModel(
     fun refresh(showLoading: Boolean = true) {
         viewModelScope.launch {
             if (showLoading) _uiState.update { it.copy(isLoading = true) }
-            repo.getDigests(100, source)
+            repo.getDigests(source)
                 .onSuccess { list -> _uiState.update { it.copy(digests = list, error = null) } }
                 .onFailure { e -> _uiState.update { it.copy(error = "连接失败: ${e.message}") } }
             if (showLoading) _uiState.update { it.copy(isLoading = false) }
@@ -69,22 +74,38 @@ abstract class DigestFeedViewModel(
 
     /** 下拉刷新：静默重新拉取列表。连续两次下拉（间隔 < 3 秒）额外触发后端强制抓取/扫描。 */
     fun pullRefresh() {
+        val current = _uiState.value
+        if (current.isRefreshing) return
+        val taskBusy = current.isRunning || pendingTrigger || triggerJob?.isActive == true
+        if (taskBusy) {
+            if (triggerOnPullRefresh) flashNotice("PDF 上传与扫描正在进行…")
+            refreshFromPull()
+            return
+        }
         val now = android.os.SystemClock.elapsedRealtime()
         val isSecondPull = now - lastPullElapsed < 3000
-        if (isSecondPull) {
+        if (triggerOnPullRefresh || isSecondPull) {
             lastPullElapsed = 0L
             trigger()  // 第二次下拉：强制抓取
-            flashNotice("已启动强制抓取，请稍候…")
+            flashNotice(if (triggerOnPullRefresh) "已启动 PDF 上传与扫描，请稍候…" else "已启动强制抓取，请稍候…")
         } else {
             lastPullElapsed = now
             flashNotice("再次下拉可强制抓取最新")
         }
+        refreshFromPull()
+    }
+
+    private fun refreshFromPull() {
+        _uiState.update { it.copy(isRefreshing = true) }
         viewModelScope.launch {
-            _uiState.update { it.copy(isRefreshing = true) }
-            repo.getDigests(100, source)
-                .onSuccess { list -> _uiState.update { it.copy(digests = list, error = null) } }
-                .onFailure { e -> _uiState.update { it.copy(error = "连接失败: ${e.message}") } }
-            _uiState.update { it.copy(isRefreshing = false) }
+            try {
+                repo.getDigests(source)
+                    .onSuccess { list -> _uiState.update { it.copy(digests = list, error = null) } }
+                    .onFailure { e -> _uiState.update { it.copy(error = "连接失败: ${e.message}") } }
+                delay(250)
+            } finally {
+                _uiState.update { it.copy(isRefreshing = false) }
+            }
         }
     }
 
@@ -101,15 +122,22 @@ abstract class DigestFeedViewModel(
     }
 
     fun trigger() {
-        viewModelScope.launch {
-            pendingTrigger = true
-            pendingPolls = 0
-            _uiState.update { it.copy(isRunning = true) }
-            triggerTask().onFailure {
-                pendingTrigger = false
-                pendingPolls = 0
-                _uiState.update { state -> state.copy(isRunning = false) }
-            }
+        if (triggerJob?.isActive == true || pendingTrigger || _uiState.value.isRunning) return
+        pendingTrigger = true
+        pendingPolls = 0
+        _uiState.update { it.copy(isRunning = true) }
+        triggerJob = viewModelScope.launch {
+            triggerTask()
+                .onSuccess { message ->
+                    if (message.isNotBlank()) flashNotice(message)
+                }
+                .onFailure { e ->
+                    pendingTrigger = false
+                    pendingPolls = 0
+                    _uiState.update { state ->
+                        state.copy(isRunning = false, error = "启动失败: ${e.message}")
+                    }
+                }
         }
     }
 
@@ -124,6 +152,14 @@ abstract class DigestFeedViewModel(
     }
 
     fun markRead(filename: String) = readStore.markRead(filename)
+
+    fun toggleGrouping() {
+        _uiState.update { it.copy(groupByJournal = !it.groupByJournal) }
+    }
+
+    fun markAllRead() {
+        readStore.markAllRead(_uiState.value.digests.map { it.filename })
+    }
 
     /** UI STARTED 时调用：启动轮询循环（已在跑则忽略）。 */
     fun startPolling() {

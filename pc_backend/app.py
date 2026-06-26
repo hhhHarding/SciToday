@@ -69,7 +69,7 @@ def healthz():
 def index():
     return jsonify({
         "ok": True,
-        "service": "SciToday backend",
+        "service": "RssAiPush backend",
         "health": "/healthz",
         "inbox": "/inbox/",
         "api_status": "/api/status",
@@ -243,12 +243,58 @@ def upload_pdf():
             saved.append(tasks.save_uploaded_pdf(f))
         except Exception as e:
             errors.append({"filename": getattr(f, "filename", ""), "error": str(e)})
+    app.logger.info("PDF 上传: saved=%s errors=%s paths=%s", len(saved), len(errors), saved)
     return jsonify({
         "ok": bool(saved),
         "uploaded": len(saved),
         "paths": saved,
         "errors": errors,
     })
+
+
+@app.route("/api/pdf/upload-chunk", methods=["POST"])
+def upload_pdf_chunk():
+    chunk = request.files.get("chunk") or request.files.get("file")
+    filename = request.form.get("filename", "")
+    if not chunk:
+        return jsonify({"error": "没有上传 PDF 分片"}), 400
+    try:
+        result = tasks.save_uploaded_pdf_chunk(
+            request.form.get("upload_id", ""),
+            filename,
+            request.form.get("index", "0"),
+            request.form.get("total", "1"),
+            chunk,
+        )
+        path = result.get("path") or ""
+        uploaded = 1 if result.get("complete") and path else 0
+        paths = [path] if path else []
+        app.logger.info(
+            "PDF 分片上传: filename=%s received=%s/%s complete=%s path=%s",
+            filename,
+            result.get("received"),
+            result.get("total"),
+            result.get("complete"),
+            path,
+        )
+        return jsonify({
+            "ok": True,
+            "uploaded": uploaded,
+            "paths": paths,
+            "errors": [],
+            "complete": bool(result.get("complete")),
+            "received": result.get("received", 0),
+            "total": result.get("total", 0),
+        })
+    except Exception as e:
+        app.logger.warning("PDF 分片上传失败: filename=%s error=%s", filename, e)
+        return jsonify({
+            "ok": False,
+            "uploaded": 0,
+            "paths": [],
+            "errors": [{"filename": filename, "error": str(e)}],
+            "error": str(e),
+        }), 400
 
 
 def _make_progress_callback(task_type):
@@ -339,7 +385,7 @@ def api_admin_save_settings():
 
 @app.route("/api/digests")
 def api_digests():
-    n = request.args.get("limit", 20, type=int)
+    n = request.args.get("limit", type=int)
     source = request.args.get("source") or None
     return jsonify(tasks.get_recent_digests(n, source=source))
 

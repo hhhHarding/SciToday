@@ -1,7 +1,14 @@
 package com.rssai.push.ui
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
@@ -11,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -19,6 +27,7 @@ import com.rssai.push.data.BackendMode
 import com.rssai.push.ui.common.SettingsSection
 import com.rssai.push.ui.common.StatCard
 import com.rssai.push.ui.settings.SettingsViewModel
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -27,6 +36,18 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.ui.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val downloadTreeLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) viewModel.saveDownloadTree(uri)
+        else viewModel.refreshDownloadAccess()
+    }
+    val allFilesLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        viewModel.refreshDownloadAccess()
+    }
 
     if (state.isLoading) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -42,10 +63,18 @@ fun SettingsScreen(
     var promptExpanded by rememberSaveable { mutableStateOf(false) }
     var feedExpanded by rememberSaveable { mutableStateOf(false) }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
+    LaunchedEffect(state.message) {
+        if (state.message != null) {
+            delay(3_000)
+            viewModel.clearMessage()
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
         item {
             Text("设置", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onBackground)
         }
@@ -76,14 +105,6 @@ fun SettingsScreen(
                         )
                         Text("上次运行: ${s.last_run}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                }
-            }
-        }
-
-        state.message?.let { msg ->
-            item {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
-                    Text(msg, modifier = Modifier.padding(12.dp), color = MaterialTheme.colorScheme.onTertiaryContainer)
                 }
             }
         }
@@ -119,16 +140,58 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(), singleLine = true
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    "当前地址: ${viewModel.selectedBackendProfile().activeBaseUrl}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { viewModel.saveBackendAndConnect(test = false) }, modifier = Modifier.weight(1f)) { Text("保存") }
                     OutlinedButton(onClick = { viewModel.saveBackendAndConnect(test = true) }, modifier = Modifier.weight(1f)) { Text("测试") }
                 }
+                Spacer(modifier = Modifier.height(8.dp))
+                BackendInfoBox(
+                    title = "下载列表读取",
+                    value = if (state.allFilesAccessGranted) "已授权" else "未授权",
+                    description = "允许后可读取 Download 根目录和子目录中的 PDF 列表。",
+                    positive = state.allFilesAccessGranted,
+                    action = {
+                        OutlinedButton(onClick = {
+                            val appIntent = Intent(
+                                Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                                Uri.parse("package:${context.packageName}")
+                            )
+                            runCatching { allFilesLauncher.launch(appIntent) }
+                                .onFailure {
+                                    allFilesLauncher.launch(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                                }
+                        }) {
+                            Text(if (state.allFilesAccessGranted) "重新授权" else "授予权限")
+                        }
+                    }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                BackendInfoBox(
+                    title = "下载目录访问",
+                    value = if (state.downloadTreeGranted) "已授权" else "未授权",
+                    description = "通过系统目录授权读取下载目录，用于发现新下载的 PDF。",
+                    positive = state.downloadTreeGranted,
+                    action = {
+                        OutlinedButton(onClick = { downloadTreeLauncher.launch(null) }) {
+                            Text(if (state.downloadTreeGranted) "重选目录" else "授权目录")
+                        }
+                    }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                BackendInfoBox(
+                    title = "Download 根目录",
+                    value = "/storage/emulated/0/Download",
+                    description = if (state.downloadTreeGranted) {
+                        "已保存目录授权，上传 PDF 到 PC 时会扫描该目录及子目录。"
+                    } else {
+                        "授权目录时请选择 Download 根目录，否则新下载的全文 PDF 可能无法被扫描。"
+                    },
+                    action = {
+                        OutlinedButton(onClick = { downloadTreeLauncher.launch(null) }) {
+                            Text("选择目录")
+                        }
+                    }
+                )
             }
         }
 
@@ -294,5 +357,98 @@ fun SettingsScreen(
         }
 
         item { Spacer(modifier = Modifier.height(80.dp)) }
+        }
+
+        state.message?.let { msg ->
+            SettingsMessagePopup(
+                message = msg,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsMessagePopup(
+    message: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.inverseSurface,
+        contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+        tonalElevation = 6.dp,
+        shadowElevation = 8.dp
+    ) {
+        Text(
+            text = message,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            style = MaterialTheme.typography.bodyMedium
+        )
+    }
+}
+
+@Composable
+private fun BackendInfoBox(
+    title: String,
+    value: String,
+    description: String,
+    modifier: Modifier = Modifier,
+    positive: Boolean? = null,
+    action: (@Composable RowScope.() -> Unit)? = null,
+) {
+    val valueColor = when (positive) {
+        true -> MaterialTheme.colorScheme.primary
+        false -> MaterialTheme.colorScheme.error
+        null -> MaterialTheme.colorScheme.onSurface
+    }
+
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        value,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = valueColor
+                    )
+                }
+                action?.let {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        content = it
+                    )
+                }
+            }
+            Text(
+                description,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }

@@ -14,7 +14,9 @@ class ReadingViewModel @Inject constructor(
     readStore: ReadStore,
 ) : DigestFeedViewModel(repo, readStore, source = "pdf") {
 
-    override suspend fun triggerTask() = repo.runPdf()
+    override val triggerOnPullRefresh: Boolean = true
+
+    override suspend fun triggerTask(): Result<String> = repo.runPdf()
 
     // 阅读页只关注 PDF 任务。
     override fun relevantProgress(p: ProgressResponse): Pair<TaskProgress?, String> =

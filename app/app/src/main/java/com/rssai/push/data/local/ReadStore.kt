@@ -40,6 +40,16 @@ class ReadStore @Inject constructor(
         }
     }
 
+    /** 批量标记全部已读。 */
+    fun markAllRead(filenames: List<String>) {
+        val newSet = _readSet.value + filenames
+        _readSet.value = newSet
+        scope.launch {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().putStringSet(KEY_READ_SET, newSet).apply()
+        }
+    }
+
     private companion object {
         const val PREFS_NAME = "read_messages"
         const val KEY_READ_SET = "read_filenames"

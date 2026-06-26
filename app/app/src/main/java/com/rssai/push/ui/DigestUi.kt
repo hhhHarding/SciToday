@@ -74,10 +74,35 @@ private val JOURNAL_ABBR = mapOf(
 
 private val STOPWORDS = setOf("of", "and", "the", "et", "for", "in", "on", "to", "a", "an", "de", "du")
 
+private val JOURNAL_CLEANERS = listOf(
+    Regex("^ScienceDirect Publication:\\s*", RegexOption.IGNORE_CASE) to "",
+    Regex("^Wiley:\\s*", RegexOption.IGNORE_CASE) to "",
+    Regex("^Taylor & Francis Online:\\s*", RegexOption.IGNORE_CASE) to "",
+    Regex("\\s*:\\s*Table of Contents\\s*$", RegexOption.IGNORE_CASE) to "",
+    Regex("\\s*[-–—|]\\s*(Latest articles|Articles in press|Table of contents)\\s*$", RegexOption.IGNORE_CASE) to ""
+)
+
+fun cleanJournalName(journal: String): String {
+    var s = journal.trim()
+    if (s.isEmpty()) return ""
+    JOURNAL_CLEANERS.forEach { (pattern, replacement) ->
+        s = pattern.replace(s, replacement)
+    }
+    return Regex("\\s+").replace(s, " ").trim(' ', '\t', '\n', '\r', ':', ';', '-')
+}
+
+fun journalGroupName(digest: Digest): String {
+    val journal = cleanJournalName(digest.journal)
+    return journal.ifBlank { "未标注期刊" }
+}
+
+fun journalGroupKey(digest: Digest): String =
+    Regex("[\\p{Punct}\\s]+").replace(journalGroupName(digest).lowercase(), " ").trim()
+
 // 期刊名 → 缩写。先查映射表，命中则返回；否则取实义词首字母生成缩写（如 GCA/GSAB）。
 // 单词期刊或缩写过短则原样返回（如 Lithos）。
 fun journalAbbr(journal: String): String {
-    val s = journal.trim()
+    val s = cleanJournalName(journal)
     if (s.isEmpty()) return ""
     JOURNAL_ABBR[s.lowercase()]?.let { return it }
     val words = s.split(Regex("\\s+")).filter { it.isNotBlank() }

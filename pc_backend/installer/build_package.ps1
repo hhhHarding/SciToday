@@ -1,6 +1,7 @@
 param(
     [string]$OutputDir = "$(Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path))\dist",
-    [switch]$IncludeWheelCache
+    [switch]$IncludeWheelCache,
+    [string]$PackageName = "SciToday-PC-Backend-V1.0.1.zip"
 )
 
 $ErrorActionPreference = "Stop"
@@ -94,24 +95,16 @@ $payloadZip = Join-Path $stage "payload.zip"
 Compress-Archive -Path $payloadRoot -DestinationPath $payloadZip -Force
 Copy-Item -LiteralPath (Join-Path $installerDir "install.ps1") -Destination (Join-Path $stage "install.ps1") -Force
 Copy-Item -LiteralPath (Join-Path $installerDir "install.cmd") -Destination (Join-Path $stage "install.cmd") -Force
+Copy-Item -LiteralPath (Join-Path $installerDir "README_PACKAGE.md") -Destination (Join-Path $stage "README_PACKAGE.md") -Force
 
-$target = Join-Path $dist "SciTodayBackendInstaller.exe"
-& $csc @(
-    "/nologo",
-    "/target:winexe",
-    "/out:$target",
-    "/win32icon:$iconPath",
-    "/reference:System.Windows.Forms.dll",
-    "/resource:$payloadZip,payload.zip",
-    "/resource:$(Join-Path $stage "install.ps1"),install.ps1",
-    (Join-Path $installerDir "RssAiPushSetup.cs")
+$zipOut = Join-Path $dist $PackageName
+$packageFiles = @(
+    $payloadZip,
+    (Join-Path $stage "install.ps1"),
+    (Join-Path $stage "install.cmd"),
+    (Join-Path $stage "README_PACKAGE.md")
 )
-if ($LASTEXITCODE -ne 0 -or -not (Test-Path $target)) {
-    throw "Setup compilation failed."
-}
+Compress-Archive -Path $packageFiles -DestinationPath $zipOut -Force
 
-$zipOut = Join-Path $dist "SciTodayBackendPackage.zip"
-Compress-Archive -Path $target, (Join-Path $installerDir "README_PACKAGE.md") -DestinationPath $zipOut -Force
-
-Write-Host "Installer: $target"
 Write-Host "Package zip: $zipOut"
+Write-Host "No self-extracting installer EXE was generated."

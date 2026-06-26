@@ -50,6 +50,7 @@ PDF_DB = _env_path("RSSAI_PDF_DB", BASE_DIR / "pdf_seen.db")
 DIGEST_DB = _env_path("RSSAI_DIGEST_DB", BASE_DIR / "digest_messages.db")
 ADMIN_DB = _env_path("RSSAI_ADMIN_DB", BASE_DIR / "admin_state.db")
 UPLOADED_PDF_DIR = _env_path("RSSAI_UPLOADED_PDF_DIR", BASE_DIR / "uploaded_pdfs")
+PDF_CHUNK_DIR = _env_path("RSSAI_PDF_CHUNK_DIR", BASE_DIR / "pdf_upload_chunks")
 QUICK_TUNNEL_STATE = _env_path("RSSAI_TUNNEL_STATE_PATH", BASE_DIR / "quick_tunnel.json")
 TRAY_COMMAND_PATH = _env_path("RSSAI_TRAY_COMMAND_PATH", BASE_DIR / "tray_command.json")
 TRAY_CONFIG_PATH = _env_path("RSSAI_TRAY_CONFIG_PATH", INSTALL_DIR / "tray_config.env")
@@ -147,7 +148,7 @@ def _write_tray_env(values, path=None):
 
 
 def _startup_run_value():
-    return f'"{INSTALL_DIR / "SciTodayTray.exe"}"'
+    return f'"{INSTALL_DIR / "RssAiPushTray.exe"}"'
 
 
 def _read_startup_value():
@@ -156,14 +157,8 @@ def _read_startup_value():
     try:
         import winreg
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run") as key:
-            for name in ("SciTodayBackend", "RssAiPushBackend"):
-                try:
-                    value, _ = winreg.QueryValueEx(key, name)
-                    if value:
-                        return value
-                except FileNotFoundError:
-                    continue
-            return ""
+            value, _ = winreg.QueryValueEx(key, "RssAiPushBackend")
+            return value or ""
     except Exception:
         return ""
 
@@ -175,13 +170,12 @@ def _set_startup_enabled(enabled):
     run_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
     with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, run_path, 0, winreg.KEY_SET_VALUE) as key:
         if enabled:
-            winreg.SetValueEx(key, "SciTodayBackend", 0, winreg.REG_SZ, _startup_run_value())
+            winreg.SetValueEx(key, "RssAiPushBackend", 0, winreg.REG_SZ, _startup_run_value())
         else:
-            for name in ("SciTodayBackend", "RssAiPushBackend"):
-                try:
-                    winreg.DeleteValue(key, name)
-                except FileNotFoundError:
-                    pass
+            try:
+                winreg.DeleteValue(key, "RssAiPushBackend")
+            except FileNotFoundError:
+                pass
     return True
 
 
@@ -198,7 +192,7 @@ def get_local_settings():
         "tray_command_path": str(TRAY_COMMAND_PATH),
         "startup": {
             "enabled": bool(startup_value),
-            "run_name": "SciTodayBackend",
+            "run_name": "RssAiPushBackend",
             "value": startup_value,
             "expected_value": _startup_run_value(),
         },
@@ -405,36 +399,113 @@ def _sanitize_filename(name):
     return (name[:80] or "untitled")
 
 
-def save_uploaded_pdf(file_storage):
-    original = getattr(file_storage, "filename", "") or "uploaded.pdf"
+def _store_uploaded_pdf(temp, original):
+    temp = Path(temp)
+    original = original or "uploaded.pdf"
     if not original.lower().endswith(".pdf"):
         raise ValueError("只支持 PDF 文件")
     safe_stem = _sanitize_filename(Path(original).stem)
     filename = f"{safe_stem}.pdf"
     UPLOADED_PDF_DIR.mkdir(parents=True, exist_ok=True)
+    if temp.stat().st_size < 20_000:
+        raise ValueError("PDF 文件过小或上传不完整")
+
+    uploaded_hash = _file_hash(temp)
+    for existing in UPLOADED_PDF_DIR.glob("*.pdf"):
+        try:
+            if _file_hash(existing) == uploaded_hash:
+                temp.unlink(missing_ok=True)
+                return str(existing)
+        except Exception:
+            continue
+
+    dest = UPLOADED_PDF_DIR / filename
+    if dest.exists():
+        dest = UPLOADED_PDF_DIR / f"{safe_stem}_{int(time.time())}.pdf"
+    temp.replace(dest)
+    return str(dest)
+
+
+def save_uploaded_pdf(file_storage):
+    original = getattr(file_storage, "filename", "") or "uploaded.pdf"
+    safe_stem = _sanitize_filename(Path(original).stem)
+    UPLOADED_PDF_DIR.mkdir(parents=True, exist_ok=True)
     temp = UPLOADED_PDF_DIR / f".{safe_stem}_{time.time_ns()}.uploading"
     try:
         file_storage.save(temp)
-        if temp.stat().st_size < 20_000:
-            raise ValueError("PDF 文件过小或上传不完整")
-
-        uploaded_hash = _file_hash(temp)
-        for existing in UPLOADED_PDF_DIR.glob("*.pdf"):
-            try:
-                if _file_hash(existing) == uploaded_hash:
-                    temp.unlink(missing_ok=True)
-                    return str(existing)
-            except Exception:
-                continue
-
-        dest = UPLOADED_PDF_DIR / filename
-        if dest.exists():
-            dest = UPLOADED_PDF_DIR / f"{safe_stem}_{int(time.time())}.pdf"
-        temp.replace(dest)
-        return str(dest)
+        return _store_uploaded_pdf(temp, original)
     except Exception:
         try:
             temp.unlink(missing_ok=True)
+        except Exception:
+            pass
+        raise
+
+
+def save_uploaded_pdf_chunk(upload_id, original, index, total, file_storage):
+    original = original or getattr(file_storage, "filename", "") or "uploaded.pdf"
+    if not original.lower().endswith(".pdf"):
+        raise ValueError("只支持 PDF 文件")
+    try:
+        index = int(index)
+        total = int(total)
+    except Exception as exc:
+        raise ValueError("分片序号无效") from exc
+    if total < 1 or total > 10000 or index < 0 or index >= total:
+        raise ValueError("分片范围无效")
+
+    safe_id = _sanitize_filename(upload_id or f"{Path(original).stem}_{int(time.time())}")[:96]
+    if not safe_id:
+        raise ValueError("上传 ID 无效")
+    upload_dir = PDF_CHUNK_DIR / safe_id
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    meta_path = upload_dir / "meta.json"
+    if not meta_path.exists():
+        meta_path.write_text(
+            json.dumps({"filename": original, "total": total, "created": time.time()}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+    part_path = upload_dir / f"{index:06d}.part"
+    temp_part = upload_dir / f".{index:06d}_{time.time_ns()}.uploading"
+    try:
+        file_storage.save(temp_part)
+        if temp_part.stat().st_size <= 0:
+            raise ValueError("分片为空")
+        temp_part.replace(part_path)
+
+        received = len(list(upload_dir.glob("*.part")))
+        if received < total:
+            return {"complete": False, "received": received, "total": total, "path": ""}
+
+        final_temp = UPLOADED_PDF_DIR / f".{_sanitize_filename(Path(original).stem)}_{time.time_ns()}.uploading"
+        UPLOADED_PDF_DIR.mkdir(parents=True, exist_ok=True)
+        with final_temp.open("wb") as output:
+            for part_index in range(total):
+                source = upload_dir / f"{part_index:06d}.part"
+                if not source.exists():
+                    return {"complete": False, "received": received, "total": total, "path": ""}
+                with source.open("rb") as input_file:
+                    while True:
+                        chunk = input_file.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        output.write(chunk)
+
+        saved_path = _store_uploaded_pdf(final_temp, original)
+        for child in upload_dir.iterdir():
+            try:
+                child.unlink()
+            except Exception:
+                pass
+        try:
+            upload_dir.rmdir()
+        except Exception:
+            pass
+        return {"complete": True, "received": total, "total": total, "path": saved_path}
+    except Exception:
+        try:
+            temp_part.unlink(missing_ok=True)
         except Exception:
             pass
         raise
@@ -462,7 +533,7 @@ def add_feed_to_opml(path, title, url):
     if not os.path.exists(path):
         root = ET.Element("opml", version="1.0")
         head = ET.SubElement(root, "head")
-        ET.SubElement(head, "title").text = "SciToday"
+        ET.SubElement(head, "title").text = "RssAiPush"
         body = ET.SubElement(root, "body")
         ET.ElementTree(root).write(path, encoding="utf-8", xml_declaration=True)
 
@@ -574,8 +645,12 @@ def _admin_db():
         status TEXT NOT NULL DEFAULT 'pending',
         created_ts INTEGER NOT NULL,
         published_ts INTEGER,
-        error TEXT
+        error TEXT,
+        digest_filename TEXT
     )""")
+    cols = {row[1] for row in con.execute("PRAGMA table_info(rss_queue)").fetchall()}
+    if "digest_filename" not in cols:
+        con.execute("ALTER TABLE rss_queue ADD COLUMN digest_filename TEXT")
     con.commit()
     return con
 
@@ -724,6 +799,52 @@ def _timestamp_epoch(timestamp, fallback=None):
         return int(fallback if fallback is not None else time.time())
 
 
+def _clean_journal_name(value):
+    raw = html_mod.unescape(str(value or "")).strip()
+    if not raw:
+        return ""
+    raw = re.sub(r"<[^>]+>", " ", raw)
+    raw = re.sub(r"^ScienceDirect Publication:\s*", "", raw, flags=re.I)
+    raw = re.sub(r"^Wiley:\s*", "", raw, flags=re.I)
+    raw = re.sub(r"^Taylor & Francis Online:\s*", "", raw, flags=re.I)
+    raw = re.sub(r"\s*:\s*Table of Contents\s*$", "", raw, flags=re.I)
+    raw = re.sub(r"\s*[-–—|]\s*(Latest articles|Articles in press|Table of contents)\s*$", "", raw, flags=re.I)
+    raw = re.sub(r"\s+", " ", raw).strip(" \t\r\n:;-")
+    return raw[:80]
+
+
+def _normalize_title_match(value):
+    text = html_mod.unescape(str(value or "")).lower()
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"[\W_]+", " ", text, flags=re.UNICODE)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _titles_match(short_title, full_title):
+    a = _normalize_title_match(short_title)
+    b = _normalize_title_match(full_title)
+    if len(a) < 16 or len(b) < 16:
+        return False
+    if a == b or a in b or b in a:
+        return True
+    return a[:72] == b[:72]
+
+
+def _journal_from_seen_title(title):
+    if not title or not RSS_DB.exists():
+        return ""
+    try:
+        con = _db_open(str(RSS_DB))
+        rows = con.execute("SELECT title, feed FROM seen ORDER BY ts DESC LIMIT 3000").fetchall()
+        con.close()
+        for seen_title, feed in rows:
+            if _titles_match(title, seen_title):
+                return _clean_journal_name(feed)
+    except Exception as e:
+        logger.debug(f"按标题回填期刊失败: {e}")
+    return ""
+
+
 def _digest_from_file(path):
     name = path.stem
     parts = name.split("_", 2)
@@ -747,20 +868,25 @@ def _digest_from_file(path):
             src = src_match.group(1).strip()
         elif pdf_file_match:
             src = "pdf"
+        journal_meta = re.search(r'<meta name="digest-journal" content="([^"]*)">', content)
+        if journal_meta:
+            journal = _clean_journal_name(journal_meta.group(1))
+        h1_match = re.search(r"<h1[^>]*>(.*?)</h1>", content, re.S | re.I)
+        if h1_match:
+            title = re.sub(r"\s+", " ", html_mod.unescape(re.sub(r"<[^>]+>", " ", h1_match.group(1)))).strip() or title
         cn_match = re.search(r"中文题目[：:]\s*(.+?)(?:\n|<br|$)", content)
         if cn_match:
             cn_title = cn_match.group(1).strip()[:120]
         kw_match = re.search(r"中文关键词[：:]\s*(.+?)(?:\n|<br|$)", content)
         if kw_match:
             keywords = kw_match.group(1).strip()[:80]
-        j_match = re.search(r"来源[：:]\s*(.+?)(?:\n|<br|$)", content)
-        if j_match:
-            raw_j = j_match.group(1).strip()
-            raw_j = re.sub(r"^ScienceDirect Publication:\s*", "", raw_j)
-            raw_j = re.sub(r"^Wiley:\s*", "", raw_j)
-            raw_j = re.sub(r":\s*Table of Contents$", "", raw_j)
-            raw_j = re.sub(r"\s+", " ", raw_j).strip()
-            journal = raw_j[:60]
+        j_match = re.search(r"(?:来源(?:/RSS)?|期刊/来源|卷期来源)[：:]\s*(.+?)(?:\n|<br|$)", content)
+        if not journal and j_match:
+            candidate = _clean_journal_name(j_match.group(1))
+            if candidate and candidate not in {"未提供", "无", "N/A", "n/a"}:
+                journal = candidate
+        if not journal and src == "rss":
+            journal = _journal_from_seen_title(title)
         c_match = re.search(r'<div class="content">(.*?)</div>', content, re.S)
         if c_match:
             preview = _preview_from_digest(html_mod.unescape(c_match.group(1)))
@@ -821,7 +947,7 @@ def _sync_digest_index():
     con.close()
 
 
-def record_digest(filename, timestamp, title, content, source="rss", cn_title="", keywords=""):
+def record_digest(filename, timestamp, title, content, source="rss", cn_title="", keywords="", journal=""):
     try:
         path = INBOX_DIR / filename
         digest = _digest_from_file(path)
@@ -830,6 +956,7 @@ def record_digest(filename, timestamp, title, content, source="rss", cn_title=""
             "title": title or digest["title"],
             "cn_title": cn_title or digest.get("cn_title", ""),
             "keywords": keywords or digest.get("keywords", ""),
+            "journal": _clean_journal_name(journal) or digest.get("journal", ""),
             "source": source or digest.get("source", "rss"),
             "preview": _preview_from_digest(content),
             "created_ts": _timestamp_epoch(timestamp or digest["timestamp"], fallback=time.time()),
@@ -1025,7 +1152,7 @@ PDF 提取文本：
 
 # ── HTML inbox ──────────────────────────────────────────
 
-def save_html(title, content, source="rss", pdf_path=None):
+def save_html(title, content, source="rss", pdf_path=None, journal=""):
     INBOX_DIR.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     safe_title = _sanitize_filename(title)
@@ -1043,16 +1170,18 @@ def save_html(title, content, source="rss", pdf_path=None):
     escaped_link = html_mod.escape(original_link)
     link_html = f'<a class="btn secondary" href="{escaped_link}">打开原文链接</a>' if original_link else ""
 
+    extra_meta = []
     if pdf_path:
-        pdf_meta = f'<meta name="pdf-file" content="{html_mod.escape(str(pdf_path))}">'
-    else:
-        pdf_meta = ""
+        extra_meta.append(f'<meta name="pdf-file" content="{html_mod.escape(str(pdf_path))}">')
+    cleaned_journal = _clean_journal_name(journal)
+    if cleaned_journal:
+        extra_meta.append(f'<meta name="digest-journal" content="{html_mod.escape(cleaned_journal)}">')
 
     tpl = _inbox_template()
     page = (tpl
             .replace("__TITLE__", escaped_title)
             .replace("__SOURCE__", html_mod.escape(source or "rss"))
-            .replace("__PDF_META__", pdf_meta)
+            .replace("__PDF_META__", "\n".join(extra_meta))
             .replace("__CREATED__", html_mod.escape(created))
             .replace("__LINK_HTML__", link_html)
             .replace("__CONTENT__", escaped_content))
@@ -1230,6 +1359,46 @@ def _fmt_ts(ts):
     return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S") if ts else ""
 
 
+def _digest_summary_for_queue_item(item, digest_filename=""):
+    title = (item.get("title") or "").strip()
+    filename = (digest_filename or "").strip()
+    if not title and not filename:
+        return {}
+    try:
+        con = _digest_db()
+        row = None
+        if filename:
+            row = con.execute("""SELECT filename, timestamp, title, cn_title, keywords,
+                journal, source, preview FROM digests WHERE filename=?""", (filename,)).fetchone()
+        if row is None and title:
+            row = con.execute("""SELECT filename, timestamp, title, cn_title, keywords,
+                journal, source, preview FROM digests
+                WHERE source='rss' AND title=?
+                ORDER BY created_ts DESC, id DESC LIMIT 1""", (title,)).fetchone()
+        if row is None and title:
+            title_prefix = title[:80]
+            row = con.execute("""SELECT filename, timestamp, title, cn_title, keywords,
+                journal, source, preview FROM digests
+                WHERE source='rss' AND (title LIKE ? OR ? LIKE title || '%')
+                ORDER BY created_ts DESC, id DESC LIMIT 1""", (title_prefix + "%", title_prefix)).fetchone()
+        con.close()
+        if not row:
+            return {}
+        return {
+            "filename": row[0],
+            "timestamp": row[1] or "",
+            "title": row[2] or "",
+            "cn_title": row[3] or "",
+            "keywords": row[4] or "",
+            "journal": row[5] or "",
+            "source": row[6] or "rss",
+            "preview": row[7] or "",
+        }
+    except Exception as e:
+        logger.warning(f"RSS 队列摘要匹配失败: {title[:80]} | {e}")
+        return {}
+
+
 def get_rss_queue(status=None, limit=100):
     limit = max(1, min(int(limit or 100), 500))
     status = (status or "").strip().lower()
@@ -1241,19 +1410,25 @@ def get_rss_queue(status=None, limit=100):
     params.append(limit)
 
     con = _admin_db()
-    rows = con.execute(f"""SELECT id, item_json, status, created_ts, published_ts, error
+    rows = con.execute(f"""SELECT id, item_json, status, created_ts, published_ts, error, digest_filename
         FROM rss_queue
         {where}
         ORDER BY created_ts DESC, id DESC
         LIMIT ?""", params).fetchall()
     con.close()
 
+    try:
+        _sync_digest_index()
+    except Exception as e:
+        logger.warning(f"RSS 队列摘要索引同步失败: {e}")
+
     items = []
-    for row_id, raw, row_status, created_ts, published_ts, error in rows:
+    for row_id, raw, row_status, created_ts, published_ts, error, digest_filename in rows:
         try:
             item = json.loads(raw or "{}")
         except Exception:
             item = {}
+        digest = _digest_summary_for_queue_item(item, digest_filename)
         items.append({
             "id": row_id,
             "status": row_status or "unknown",
@@ -1270,6 +1445,11 @@ def get_rss_queue(status=None, limit=100):
             "publication_date": item.get("publication_date", ""),
             "source_info": item.get("source_info", ""),
             "article_type": item.get("article_type", ""),
+            "summary": item.get("summary", ""),
+            "authors": item.get("authors", []),
+            "corresponding_author": item.get("corresponding_author", ""),
+            "digest_filename": digest_filename or digest.get("filename", ""),
+            "digest": digest,
         })
 
     return {
@@ -1296,10 +1476,10 @@ def _next_rss_queue_items(limit):
     return items
 
 
-def _mark_rss_queue_published(row_id):
+def _mark_rss_queue_published(row_id, digest_filename=""):
     con = _admin_db()
-    con.execute("UPDATE rss_queue SET status='published', published_ts=?, error='' WHERE id=?",
-                (int(time.time()), row_id))
+    con.execute("UPDATE rss_queue SET status='published', published_ts=?, error='', digest_filename=? WHERE id=?",
+                (int(time.time()), digest_filename or "", row_id))
     con.commit()
     con.close()
 
@@ -1318,11 +1498,12 @@ def _publish_rss_item(item, idx=1, total=1, progress_callback=None):
     register_pending(item)
     digest = ai_digest_one(item)
 
-    filename, ts = save_html(item["title"], digest)
+    journal = _clean_journal_name(item.get("feed") or item.get("source_info") or "")
+    filename, ts = save_html(item["title"], digest, journal=journal)
     update_index(filename, f"{ts} {html_mod.escape(item['title'])}")
 
     cn_title, keywords = make_short_push(item["title"], digest, filename)
-    record_digest(filename, ts, item["title"], digest, source="rss", cn_title=cn_title, keywords=keywords)
+    record_digest(filename, ts, item["title"], digest, source="rss", cn_title=cn_title, keywords=keywords, journal=journal)
     push.send_digest_notification(cn_title, keywords, filename)
     return filename
 
@@ -1361,8 +1542,8 @@ def run_rss_publish(progress_callback=None):
     record_event("rss_publish", f"RSS publish 开始: {total} 篇")
     for idx, (row_id, item) in enumerate(queued, 1):
         try:
-            _publish_rss_item(item, idx, total, progress_callback)
-            _mark_rss_queue_published(row_id)
+            filename = _publish_rss_item(item, idx, total, progress_callback)
+            _mark_rss_queue_published(row_id, filename)
             count += 1
             time.sleep(1.5)
         except Exception as e:
@@ -1847,8 +2028,11 @@ def reset_seen_to_recent_week():
     con.close()
 
 
-def get_recent_digests(limit=20, source=None):
-    limit = max(1, min(int(limit or 20), 500))
+def get_recent_digests(limit=None, source=None):
+    if limit is not None:
+        limit = int(limit)
+        if limit <= 0:
+            limit = None
     try:
         _sync_digest_index()
         con = _digest_db()
@@ -1857,12 +2041,15 @@ def get_recent_digests(limit=20, source=None):
         if source:
             where = "WHERE source=?"
             params.append(source)
-        params.append(limit)
+        limit_clause = ""
+        if limit is not None:
+            limit_clause = "LIMIT ?"
+            params.append(limit)
         rows = con.execute(f"""SELECT filename, timestamp, title, cn_title, keywords,
             journal, source, preview FROM digests
             {where}
             ORDER BY created_ts DESC, id DESC
-            LIMIT ?""", params).fetchall()
+            {limit_clause}""", params).fetchall()
         con.close()
         return [{
             "filename": r[0],
@@ -1879,13 +2066,14 @@ def get_recent_digests(limit=20, source=None):
         files = sorted(INBOX_DIR.glob("*.html"), key=lambda p: p.stat().st_mtime, reverse=True)
         files = [f for f in files if f.name != "index.html"]
         digests = []
-        for f in files[:limit * 5] if source else files[:limit]:
+        scan_files = files if limit is None else (files[:limit * 5] if source else files[:limit])
+        for f in scan_files:
             digest = _digest_from_file(f)
             if source and digest["source"] != source:
                 continue
             digest.pop("created_ts", None)
             digests.append(digest)
-            if len(digests) >= limit:
+            if limit is not None and len(digests) >= limit:
                 break
         return digests
 
@@ -2170,7 +2358,7 @@ def _index_template():
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>SciToday Inbox</title>
+<title>RssAiPush Inbox</title>
 <style>
 :root{color-scheme:light dark;--bg:#f6f7f9;--card:#fff;--text:#15171a;--muted:#6b7280;--border:#e5e7eb;--accent:#2563eb}
 @media(prefers-color-scheme:dark){:root{--bg:#0f172a;--card:#1e293b;--text:#f1f5f9;--muted:#94a3b8;--border:#334155;--accent:#60a5fa}}
@@ -2186,7 +2374,7 @@ h1{font-size:24px;margin:4px 0 12px}
 </head>
 <body>
 <div class="container">
-<h1>SciToday Inbox</h1>
+<h1>RssAiPush Inbox</h1>
 <div class="sub">最新论文总结在最上方。点击标题查看手机阅读版全文。</div>
 <!-- ITEMS -->
 </div>

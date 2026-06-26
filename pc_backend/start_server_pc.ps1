@@ -1,5 +1,5 @@
 param(
-    [string]$DataDir = "$env:USERPROFILE\SciTodayData",
+    [string]$DataDir = "$env:USERPROFILE\RssAiPushData",
     [string]$HostAddress = "127.0.0.1",
     [int]$Port = 5200,
     [string]$AuthToken = $env:RSSAI_AUTH_TOKEN,
@@ -43,7 +43,7 @@ if ($Restart) {
     Start-Sleep -Seconds 1
 }
 
-Write-Host "SciToday PC backend"
+Write-Host "RssAiPush PC backend"
 Write-Host "Data dir: $resolvedDataDir"
 Write-Host "Listen: http://$HostAddress`:$Port"
 Write-Host "Auth: $(if ($env:RSSAI_AUTH_TOKEN) { 'enabled' } else { 'disabled' })"

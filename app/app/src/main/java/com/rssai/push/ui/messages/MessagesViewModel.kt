@@ -14,12 +14,11 @@ class MessagesViewModel @Inject constructor(
     readStore: ReadStore,
 ) : DigestFeedViewModel(repo, readStore, source = "rss") {
 
-    override suspend fun triggerTask() = repo.runRss()
+    override suspend fun triggerTask(): Result<String> = repo.runRss().map { "" }
 
-    // 消息页：RSS 优先展示，其次 PDF（两类任务都可能在跑）。
+    // 订阅页只展示 RSS 任务；PDF 监控状态只允许出现在阅读页顶部。
     override fun relevantProgress(p: ProgressResponse): Pair<TaskProgress?, String> = when {
         p.rss.active -> p.rss to "RSS 抓取中"
-        p.pdf.active -> p.pdf to "PDF 监控中"
         else -> null to ""
     }
 }

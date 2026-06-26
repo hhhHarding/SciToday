@@ -2,6 +2,7 @@ package com.rssai.push.ui.common
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -18,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -96,40 +98,37 @@ fun SwipeToDeleteItem(
 @Composable
 fun MessageCard(digest: Digest, read: Boolean, onClick: () -> Unit) {
     val titleColor = if (read) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
-    // 题目加粗：未读最重，已读略轻但仍醒目。
     val titleWeight = if (read) FontWeight.SemiBold else FontWeight.Bold
-    // 未读用主色淡染背景 + 主色描边，已读纯净 surface，对比更分明。
     val bgColor = if (read) MaterialTheme.colorScheme.surface
-        else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+        else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.42f)
+    val borderColor = if (read) MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+        else MaterialTheme.colorScheme.primary.copy(alpha = 0.36f)
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = bgColor),
-        shape = RoundedCornerShape(10.dp),
-        border = if (read) null
-            else androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(0.6.dp, borderColor)
     ) {
-        Row(modifier = Modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
             if (!read) {
                 Box(
                     modifier = Modifier
-                        .width(5.dp)
-                        .height(IntrinsicSize.Max)
+                        .width(2.dp)
                         .fillMaxHeight()
-                        .clip(RoundedCornerShape(topStart = 10.dp, bottomStart = 10.dp))
+                        .clip(RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp))
                         .background(MaterialTheme.colorScheme.primary)
                 )
             }
-            Column(modifier = Modifier.padding(12.dp).weight(1f)) {
+            Column(modifier = Modifier.padding(horizontal = 11.dp, vertical = 8.dp).weight(1f)) {
                 Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (!read) {
-                        // 未读圆点指示
                         Box(
                             modifier = Modifier
                                 .padding(top = 5.dp)
-                                .size(8.dp)
+                                .size(7.dp)
                                 .clip(RoundedCornerShape(4.dp))
                                 .background(MaterialTheme.colorScheme.primary)
                         )
@@ -140,7 +139,9 @@ fun MessageCard(digest: Digest, read: Boolean, onClick: () -> Unit) {
                         fontWeight = titleWeight,
                         color = titleColor,
                         fontSize = 14.sp,
-                        maxLines = 3
+                        lineHeight = 19.sp,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
                 if (digest.cn_title.isNotEmpty()) {
@@ -150,7 +151,9 @@ fun MessageCard(digest: Digest, read: Boolean, onClick: () -> Unit) {
                         fontWeight = if (read) FontWeight.SemiBold else FontWeight.Bold,
                         color = if (read) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
                         fontSize = 13.sp,
-                        maxLines = 3
+                        lineHeight = 18.sp,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
                 if (digest.keywords.isNotEmpty()) {
@@ -159,7 +162,9 @@ fun MessageCard(digest: Digest, read: Boolean, onClick: () -> Unit) {
                         "关键词：${digest.keywords}",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2
+                        lineHeight = 17.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
                 if (digest.preview.isNotEmpty()) {
@@ -168,33 +173,44 @@ fun MessageCard(digest: Digest, read: Boolean, onClick: () -> Unit) {
                         digest.preview,
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 3
+                        lineHeight = 17.sp,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
                 Spacer(modifier = Modifier.height(6.dp))
-                // 底部行：时间（左） + 期刊缩写（右）
                 val abbr = journalAbbr(digest.journal)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.Start
                 ) {
                     Text(
                         formatDigestTimestamp(digest.timestamp),
+                        modifier = Modifier.weight(1f),
                         fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     if (abbr.isNotEmpty()) {
+                        Spacer(modifier = Modifier.width(8.dp))
                         Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                            modifier = Modifier.widthIn(max = 112.dp),
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (read) MaterialTheme.colorScheme.surfaceVariant
+                                else MaterialTheme.colorScheme.primary.copy(alpha = 0.13f),
+                            border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
                         ) {
                             Text(
                                 abbr,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                color = if (read) MaterialTheme.colorScheme.onSurfaceVariant
+                                    else MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }

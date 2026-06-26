@@ -11,8 +11,11 @@ import com.rssai.push.data.Feed
 import com.rssai.push.data.FeedRequest
 import com.rssai.push.data.ProgressResponse
 import com.rssai.push.data.Status
+import com.rssai.push.data.local.AppHeartbeatReporter
+import com.rssai.push.data.local.PhonePdfUploadSummary
 import com.rssai.push.data.local.PhonePdfUploader
 import okhttp3.RequestBody
+import retrofit2.HttpException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -23,12 +26,18 @@ import javax.inject.Singleton
 @Singleton
 class DigestRepository @Inject constructor(
     private val phonePdfUploader: PhonePdfUploader,
+    private val heartbeatReporter: AppHeartbeatReporter,
 ) {
 
     private val api get() = ApiClient.api
 
-    suspend fun getDigests(limit: Int, source: String?): Result<List<Digest>> =
-        runCatching { api.getDigests(limit, source) }
+    suspend fun getDigests(source: String?): Result<List<Digest>> =
+        runCatching { api.getDigests(source = source) }
+            .also { result ->
+                result.exceptionOrNull()?.let {
+                    heartbeatReporter.record("getDigests:$source", false, it.message)
+                }
+            }
 
     suspend fun deleteDigest(filename: String): Result<Unit> =
         runCatching { api.deleteDigest(filename); Unit }
@@ -39,14 +48,39 @@ class DigestRepository @Inject constructor(
     suspend fun resetDigests(): Result<ClearResponse> =
         runCatching { api.resetDigests() }
 
-    suspend fun runRss(): Result<Unit> = runCatching { api.runRss(); Unit }
-
-    suspend fun runPdf(): Result<Unit> = runCatching {
-        if (ApiClient.currentProfile().mode == BackendMode.PC) {
-            phonePdfUploader.uploadRecentDownloads()
-        }
-        api.runPdf()
+    suspend fun runRss(): Result<Unit> = runCatching {
+        api.runRss()
         Unit
+    }.also { result ->
+        heartbeatReporter.record("runRss", result.isSuccess, result.exceptionOrNull()?.message)
+    }
+
+    suspend fun runPdf(): Result<String> = runCatching {
+        var uploadMessage = ""
+        if (ApiClient.currentProfile().mode == BackendMode.PC) {
+            uploadMessage = runCatching { phonePdfUploader.uploadRecentDownloads() }
+                .fold(
+                    onSuccess = { summary ->
+                        val message = summary.toMessage()
+                        heartbeatReporter.record("pdfUpload", summary.errors.isEmpty(), message)
+                        message
+                    },
+                    onFailure = { error ->
+                        val message = "PDF 上传失败: ${error.message}"
+                        heartbeatReporter.record("pdfUpload", false, message)
+                        message
+                    }
+                )
+        }
+        val scanMessage = try {
+            api.runPdf()
+            "已启动 PDF 扫描"
+        } catch (e: HttpException) {
+            if (e.code() == 409) "PDF 扫描已在运行" else throw e
+        }
+        listOf(uploadMessage, scanMessage).filter { it.isNotBlank() }.joinToString("；")
+    }.also { result ->
+        heartbeatReporter.record("runPdf", result.isSuccess, result.exceptionOrNull()?.message)
     }
 
     suspend fun getProgress(): Result<ProgressResponse> =
@@ -72,4 +106,16 @@ class DigestRepository @Inject constructor(
 
     suspend fun getLogs(lines: Int): Result<List<String>> =
         runCatching { api.getLogs(lines) }
+}
+
+private fun PhonePdfUploadSummary.toMessage(): String {
+    if (errors.isNotEmpty()) {
+        val detail = errors.take(2).joinToString("; ")
+        return "PDF 上传部分失败：发现 ${found} 个，上传 ${uploaded} 个；$detail"
+    }
+    return when {
+        found <= 0 -> "未发现需要上传的新 PDF"
+        uploaded <= 0 -> "发现 ${found} 个 PDF，但没有成功上传"
+        else -> "已上传 ${uploaded}/${found} 个 PDF 到 PC"
+    }
 }

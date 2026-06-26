@@ -1,4 +1,4 @@
-# SciToday PC Web Console and Installer
+# SciToday PC Web Console and ZIP Installer
 
 ## Local Web Console
 
@@ -31,7 +31,7 @@ The web console stores the token in browser localStorage and can also receive it
 `/api/run/rss` remains compatible and still performs immediate discover + publish.
 Scheduled PC mode now uses discovery and publish as separate jobs.
 
-## Installer Build
+## ZIP Package Build
 
 Build the current backend package:
 
@@ -41,13 +41,19 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\installer\build_package.ps
 
 Outputs:
 
-- `dist\SciTodayBackendInstaller.exe`
-- `dist\SciTodayBackendPackage.zip`
+- `dist\SciToday-PC-Backend-V1.0.1.zip`
+
+The release package is a transparent ZIP. It does not generate or ship a
+self-extracting installer EXE. Extract the ZIP and run `install.cmd`.
 
 The installer is per-user and writes HKCU startup entry `SciTodayBackend`.
 It prompts for install path, data path, local port, and auth token. Quick Tunnel
 is used by default, so no domain, Named Tunnel token, or GitHub upload is required.
 Existing data directories are preserved.
+
+If Windows Defender or SmartScreen blocks the tray executable, extract
+`payload.zip`, open `payload\backend`, and start the backend directly with
+`start_server_pc.ps1`.
 
 ## Cloudflare Quick Tunnel
 

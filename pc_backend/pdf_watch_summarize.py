@@ -558,7 +558,7 @@ def update_index(filename, display_text):
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>SciToday Inbox</title>
+<title>RssAiPush Inbox</title>
 <style>
 :root {
   color-scheme: light dark;
@@ -625,7 +625,7 @@ h1 {
 </head>
 <body>
 <div class="container">
-<h1>SciToday Inbox</h1>
+<h1>RssAiPush Inbox</h1>
 <div class="sub">最新论文总结在最上方。点击标题查看手机阅读版全文。</div>
 <!-- ITEMS -->
 </div>

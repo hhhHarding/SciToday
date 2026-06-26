@@ -1,4 +1,4 @@
-# SciToday PC Staging Workflow
+# RssAiPush PC Staging Workflow
 
 This keeps the Termux backend as the default backend and runs the PC backend as a staging target.
 
@@ -7,7 +7,7 @@ This keeps the Termux backend as the default backend and runs the PC backend as 
 Connect the phone with ADB enabled, then run from this directory:
 
 ```powershell
-.\sync_termux_data_to_pc.ps1 -DataDir "$env:USERPROFILE\SciTodayData"
+.\sync_termux_data_to_pc.ps1 -DataDir "$env:USERPROFILE\RssAiPushData"
 ```
 
 This copies `config.json`, SQLite databases, `feedly.opml`, and `inbox` into the PC data directory.
@@ -53,7 +53,7 @@ Example `cloudflared` config target:
 
 ```yaml
 ingress:
-  - hostname: your-scitoday-domain.example.com
+  - hostname: your-rssaipush-domain.example.com
     service: http://127.0.0.1:5200
   - service: http_status:404
 ```

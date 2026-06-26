@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/sh
-cd /storage/emulated/0/SciToday 2>/dev/null || cd /storage/emulated/0/RssAiPush || exit 1
+cd /storage/emulated/0/RssAiPush || exit 1
 
 if [ -f ai.env ]; then
     . ./ai.env
@@ -22,3 +22,4 @@ fi
 
 nohup python app.py >> server.log 2>&1 &
 echo "Server started on port 5000"
+

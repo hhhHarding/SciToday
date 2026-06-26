@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/sh
-# Legacy ADB bridge for older Android/Termux deployments.
+# ADB Bridge for RssAiPush
 # 在 Termux 中运行此脚本，之后可通过 ADB 发送命令
-# 用法: 在 Termux 中运行此脚本；默认兼容旧 /storage/emulated/0/RssAiPush 路径。
+# 用法: 在 Termux 中运行: sh /storage/emulated/0/RssAiPush/adb_bridge.sh
 
 CMD_DIR="/storage/emulated/0/RssAiPush/.adb_cmds"
 OUT_DIR="/storage/emulated/0/RssAiPush/.adb_out"

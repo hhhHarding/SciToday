@@ -66,6 +66,12 @@ function copyField(label, value, placeholder = "未生成") {
   </label>`;
 }
 
+function withToken(path) {
+  if (!state.token) return path;
+  const sep = path.includes("?") ? "&" : "?";
+  return `${path}${sep}token=${encodeURIComponent(state.token)}`;
+}
+
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -138,21 +144,49 @@ function renderProgress(progress, keys) {
 
 function renderRssQueue(queue) {
   const stats = queue.stats || {};
-  const rows = (queue.items || []).map(item => `<tr>
-    <td><div class="itemTitle">${h(item.title || "无标题")}</div><div class="meta">${h(item.feed)} ${item.doi ? " · DOI " + h(item.doi) : ""}</div></td>
-    <td><span class="badge ${statusClass(item.status)}">${h(item.status)}</span></td>
-    <td>${h(item.created)}</td>
-    <td>${h(item.published)}</td>
-    <td>${item.link ? `<a href="${h(item.link)}" target="_blank">打开</a>` : ""}</td>
-    <td>${h(item.error)}</td>
-  </tr>`).join("");
+  const rows = (queue.items || []).map(item => {
+    const digest = item.digest || {};
+    const authors = Array.isArray(item.authors) ? item.authors.join(", ") : (item.authors || "");
+    const aiTitle = digest.cn_title || digest.title || "";
+    const digestButton = digest.filename
+      ? `<button data-open="${h(digest.filename)}" data-title="${h(aiTitle || item.title || "AI 返回内容")}">打开 AI 返回内容</button>`
+      : `<span class="label">暂无可打开的 AI 返回内容</span>`;
+    return `<div class="queuePair">
+      <div class="queueHeader">
+        <div>
+          <span class="badge ${statusClass(item.status)}">${h(item.status)}</span>
+          <span class="meta">入队 ${h(item.created || "-")} · 发布 ${h(item.published || "-")}</span>
+        </div>
+        <div class="queueActions">
+          ${item.link ? `<a class="badge" href="${h(item.link)}" target="_blank">原文链接</a>` : ""}
+          ${digestButton}
+        </div>
+      </div>
+      <div class="queueColumns">
+        <section class="queuePane">
+          <h3>RSS 推送（英文）</h3>
+          <div class="itemTitle">${h(item.title || "无标题")}</div>
+          <div class="meta">${h(item.feed || "")}${item.doi ? " · DOI " + h(item.doi) : ""}</div>
+          <div class="meta">${h(item.article_type || "")}${item.first_author ? " · 一作 " + h(item.first_author) : ""}${authors ? " · 作者 " + h(authors) : ""}</div>
+          <p>${h(item.summary || "RSS 未提供摘要。")}</p>
+        </section>
+        <section class="queuePane aiPane">
+          <h3>AI 返回内容（中文）</h3>
+          ${aiTitle ? `<div class="itemTitle">${h(aiTitle)}</div>` : `<div class="itemTitle mutedTitle">尚未匹配到 AI 返回内容</div>`}
+          <div class="meta">${digest.keywords ? "关键词：" + h(digest.keywords) : "关键词：未生成"}${digest.timestamp ? " · " + h(digest.timestamp) : ""}</div>
+          <p>${h(digest.preview || (item.status === "published" ? "已发布，但未在摘要索引中匹配到中文内容。" : "等待发布后生成中文 AI 返回内容。"))}</p>
+          ${item.error ? `<div class="queueError">${h(item.error)}</div>` : ""}
+        </section>
+      </div>
+    </div>`;
+  }).join("");
   return `
     <div class="grid">
       ${card("待发布", `<div class="stat">${stats.pending || 0}</div><div class="label">pending</div>`)}
       ${card("已发布", `<div class="stat">${stats.published || 0}</div><div class="label">published</div>`)}
       ${card("失败", `<div class="stat ${stats.error ? "bad" : ""}">${stats.error || 0}</div><div class="label">error</div>`)}
     </div>
-    ${card("RSS 队列明细", `<div class="tableWrap"><table><thead><tr><th>论文</th><th>状态</th><th>入队</th><th>发布</th><th>链接</th><th>错误</th></tr></thead><tbody>${rows || `<tr><td colspan="6">暂无队列记录</td></tr>`}</tbody></table></div>`)}
+    ${card("RSS 队列明细", `<div class="queueList">${rows || `<div class="panel">暂无队列记录</div>`}</div>`)}
   `;
 }
 
@@ -370,7 +404,7 @@ async function refresh() {
 async function openDigest(filename, title) {
   state.currentDigest = filename;
   document.getElementById("detailTitle").textContent = title || filename;
-  document.getElementById("digestFrame").src = `/inbox/${encodeURIComponent(filename)}`;
+  document.getElementById("digestFrame").src = withToken(`/inbox/${encodeURIComponent(filename)}`);
   document.getElementById("chatOutput").textContent = "";
   document.getElementById("detailDialog").showModal();
 }

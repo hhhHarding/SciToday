@@ -16,6 +16,9 @@ interface ApiService {
     @GET("/api/status")
     suspend fun getStatus(): Status
 
+    @POST("/api/app/heartbeat")
+    suspend fun postHeartbeat(@Body request: AppHeartbeatRequest): RunResponse
+
     @GET("/api/config")
     suspend fun getConfig(): ConfigResponse
 
@@ -27,7 +30,7 @@ interface ApiService {
 
     @GET("/api/digests")
     suspend fun getDigests(
-        @Query("limit") limit: Int = 20,
+        @Query("limit") limit: Int? = null,
         @Query("source") source: String? = null
     ): List<Digest>
 
@@ -61,6 +64,16 @@ interface ApiService {
     @Multipart
     @POST("/api/pdf/upload")
     suspend fun uploadPdf(@Part files: List<MultipartBody.Part>): PdfUploadResponse
+
+    @Multipart
+    @POST("/api/pdf/upload-chunk")
+    suspend fun uploadPdfChunk(
+        @Part chunk: MultipartBody.Part,
+        @Part("upload_id") uploadId: RequestBody,
+        @Part("filename") filename: RequestBody,
+        @Part("index") index: RequestBody,
+        @Part("total") total: RequestBody
+    ): PdfUploadResponse
 
     @GET("/api/logs")
     suspend fun getLogs(@Query("lines") lines: Int = 200): List<String>
@@ -143,10 +156,10 @@ object ApiClient {
 
     private fun createService(baseUrl: String, token: String?): ApiService {
         val client = OkHttpClient.Builder()
-            // AI 总结 / chat 等接口耗时长，默认 10s 超时会误判失败，统一放宽到 120s。
+            // AI 总结 / chat / PDF 上传都可能耗时较长，默认 10s 超时会误判失败。
             .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-            .readTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
-            .writeTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(10, java.util.concurrent.TimeUnit.MINUTES)
+            .writeTimeout(10, java.util.concurrent.TimeUnit.MINUTES)
             .addInterceptor { chain ->
                 val request = if (token.isNullOrBlank()) {
                     chain.request()

@@ -6,22 +6,37 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import com.rssai.push.data.ApiClient
+import com.rssai.push.data.local.AppHeartbeatReporter
 import com.rssai.push.navigation.AppNavigation
 import com.rssai.push.navigation.DeepLink
 import com.rssai.push.ui.theme.RssAiPushTheme
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    @Inject lateinit var heartbeatReporter: AppHeartbeatReporter
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ApiClient.configure(this)
+        heartbeatReporter.start()
         enableEdgeToEdge()
         setContent {
             RssAiPushTheme {
                 AppNavigation(deepLink = parseDeepLink(intent))
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        heartbeatReporter.sendNow("resume")
+    }
+
+    override fun onPause() {
+        heartbeatReporter.sendNow("pause")
+        super.onPause()
     }
 
     override fun onNewIntent(intent: Intent) {

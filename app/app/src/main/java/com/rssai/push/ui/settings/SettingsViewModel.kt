@@ -47,6 +47,7 @@ data class SettingsUiState(
     val feeds: List<Feed> = emptyList(),
     val status: Status? = null,
     val downloadTreeGranted: Boolean = false,
+    val allFilesAccessGranted: Boolean = false,
     val isLoading: Boolean = true,
     val message: String? = null,
 )
@@ -68,7 +69,8 @@ class SettingsViewModel @Inject constructor(
                 backendMode = backend.mode,
                 pcBaseUrl = backend.pcBaseUrl,
                 authToken = backend.authToken,
-                downloadTreeGranted = phonePdfUploader.hasDownloadTreeAccess()
+                downloadTreeGranted = phonePdfUploader.hasDownloadTreeAccess(),
+                allFilesAccessGranted = phonePdfUploader.hasAllFilesAccess()
             )
         }
         load()
@@ -90,7 +92,12 @@ class SettingsViewModel @Inject constructor(
     fun setScheduleEnabled(v: Boolean) = _ui.update { it.copy(scheduleEnabled = v) }
     fun clearMessage() = _ui.update { it.copy(message = null) }
     fun refreshDownloadAccess() =
-        _ui.update { it.copy(downloadTreeGranted = phonePdfUploader.hasDownloadTreeAccess()) }
+        _ui.update {
+            it.copy(
+                downloadTreeGranted = phonePdfUploader.hasDownloadTreeAccess(),
+                allFilesAccessGranted = phonePdfUploader.hasAllFilesAccess()
+            )
+        }
 
     fun saveDownloadTree(uri: android.net.Uri) {
         runCatching { phonePdfUploader.persistDownloadTree(uri) }
@@ -98,6 +105,7 @@ class SettingsViewModel @Inject constructor(
                 _ui.update {
                     it.copy(
                         downloadTreeGranted = phonePdfUploader.hasDownloadTreeAccess(),
+                        allFilesAccessGranted = phonePdfUploader.hasAllFilesAccess(),
                         message = "下载目录授权已保存"
                     )
                 }
@@ -188,10 +196,10 @@ class SettingsViewModel @Inject constructor(
                 val ok = cfg.isSuccess
                 _ui.update {
                     it.copy(message = when {
-                        ok && test -> "连接成功: ${profile.activeBaseUrl}"
-                        ok -> "后端配置已保存: ${profile.activeBaseUrl}"
+                        ok && test -> "测试成功"
+                        ok -> "保存成功"
                         test -> "连接失败"
-                        else -> "后端配置已保存，但连接失败"
+                        else -> "保存成功，但连接失败"
                     })
                 }
             }

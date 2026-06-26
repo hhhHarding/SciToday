@@ -139,6 +139,64 @@ td, th { border-bottom: 1px solid var(--border); padding: 8px; text-align: left;
 th { color: var(--muted); font-weight: 600; }
 .tableWrap { width: 100%; overflow-x: auto; }
 .tableWrap td { max-width: 420px; overflow-wrap: anywhere; }
+.queueList {
+  display: grid;
+  gap: 10px;
+}
+.queuePair {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fbfcfd;
+  padding: 12px;
+}
+.queueHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+}
+.queueActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.queueColumns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+.queuePane {
+  border: 1px solid #e4e9f0;
+  border-radius: 8px;
+  background: white;
+  padding: 11px;
+  min-width: 0;
+}
+.queuePane h3 {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.queuePane p {
+  max-height: 190px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+.aiPane {
+  background: #f8fbfa;
+}
+.mutedTitle {
+  color: var(--muted);
+}
+.queueError {
+  margin-top: 8px;
+  color: var(--danger);
+  font-size: 12px;
+}
 .importRow { margin-top: 10px; }
 #detailDialog {
   width: min(1100px, 94vw);
@@ -162,4 +220,7 @@ th { color: var(--muted); font-weight: 600; }
   .brand { display: none; }
   .nav { width: auto; white-space: nowrap; }
   header { align-items: flex-start; flex-direction: column; }
+  .queueHeader { align-items: flex-start; flex-direction: column; }
+  .queueActions { justify-content: flex-start; }
+  .queueColumns { grid-template-columns: 1fr; }
 }
