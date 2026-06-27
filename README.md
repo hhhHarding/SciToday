@@ -48,50 +48,130 @@ Edit `config.json`:
 - `rss.opml_path`: your OPML file path, for example `$env:USERPROFILE\SciTodayData\feedly.opml`.
 - `server.auth_token`: a long random token used by the web console and Android app.
 
-Start the backend:
+Generate a real access token and start the backend. Do not type the literal placeholder `<long-random-token>`:
 
 ```powershell
+Set-ExecutionPolicy -Scope Process Bypass -Force
+$token = [guid]::NewGuid().ToString("N")
+Write-Host "SciToday access token: $token"
+
 .\start_server_pc.ps1 `
   -InstallDeps `
   -Restart `
   -DataDir "$env:USERPROFILE\SciTodayData" `
   -Port 5200 `
-  -AuthToken "<long-random-token>"
+  -AuthToken $token
 ```
 
-Open the console:
+Keep this terminal open while running in source mode. Open the console:
 
 ```text
 http://127.0.0.1:5200/admin/
 ```
 
+Use the exact token printed above when the Admin page asks for an access token.
+
 ### Install From GitHub Release
 
-Download `SciToday-PC-Backend-V1.0.1.zip` from the GitHub Release, extract it, and run:
+Download `SciToday-PC-Backend-V1.0.1.zip` from the GitHub Release, extract the ZIP, and run:
 
 ```powershell
 .\install.cmd
 ```
 
-The release uses a transparent ZIP package instead of a self-extracting EXE. This is easier to inspect and avoids the extra Defender/SmartScreen friction commonly caused by unsigned installer stubs. The ZIP contains install scripts plus `payload.zip`.
+The release uses a transparent ZIP package instead of a self-extracting EXE. The release ZIP contains `install.cmd`, `install.ps1`, and the required `payload.zip`.
 
-If Windows blocks the tray executable, extract `payload.zip`, open `payload\backend`, and start the backend directly:
+> `pc_backend/installer/` in a source checkout is only the installer source. It normally does **not** contain `payload.zip`, so `install.cmd` cannot be run there until the package has been built.
+
+If Windows blocks the tray executable, extract `payload.zip`, open `payload\backend`, and start the backend directly with a generated token:
 
 ```powershell
-.\start_server_pc.ps1 -InstallDeps -Restart -DataDir "$env:USERPROFILE\SciTodayData" -Port 5200 -AuthToken "<long-random-token>"
+$token = [guid]::NewGuid().ToString("N")
+.\start_server_pc.ps1 -InstallDeps -Restart -DataDir "$env:USERPROFILE\SciTodayData" -Port 5200 -AuthToken $token
+$token
 ```
 
 ### Build Windows ZIP Package
 
-The package source is in `pc_backend/installer/`.
+The package source is in `pc_backend/installer/`. Run this command from the repository root:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\pc_backend\installer\build_package.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\pc_backend\installer\build_package.ps1
 ```
+
+The generated package is written to:
+
+```text
+pc_backend\dist\SciToday-PC-Backend-V1.0.1.zip
+```
+
+Extract that generated ZIP to a new directory and run its `install.cmd`. Do not run the source-tree `pc_backend\installer\install.cmd` directly unless `payload.zip` exists beside it.
 
 By default the package does not bundle a Python wheel cache, so it can install dependencies online for the user's Python version. Use `-IncludeWheelCache` only when you intentionally build for an offline Windows x64 deployment with a matching Python version.
 
-Generated package files are written to `pc_backend/dist/` and are ignored by Git. Public releases should attach ZIP packages and APK files as GitHub Release assets rather than committing binaries to the repository. Self-extracting installer EXE files are no longer generated for public releases.
+### Windows Installation Troubleshooting
+
+#### `payload.zip` does not exist
+
+You are running `install.cmd` from the source tree instead of a built GitHub Release package. Either run the backend from source, or build the ZIP package first with `build_package.ps1`, extract the generated package, and then run `install.cmd` from that extracted directory.
+
+#### PowerShell says the script is not digitally signed
+
+Use a process-scoped policy override; this does not permanently change the system policy:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass -Force
+Unblock-File .\install.ps1
+Unblock-File .\install.cmd
+Unblock-File .\payload.zip
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -PayloadZip .\payload.zip
+```
+
+Only run `Unblock-File .\payload.zip` when that file actually exists.
+
+#### `UnexpectedToken`, unexpected `}`, or errors near `\dlmanager`, `tray_config.env`, or JSON
+
+Windows PowerShell 5.1 may parse a UTF-8 script without a BOM using the wrong encoding. Prefer PowerShell 7:
+
+```powershell
+pwsh -NoProfile -File .\install.ps1 -PayloadZip .\payload.zip
+```
+
+If PowerShell 7 is unavailable, convert the script to UTF-8 with BOM and retry:
+
+```powershell
+$path = (Resolve-Path .\install.ps1).Path
+$text = [IO.File]::ReadAllText($path, [Text.UTF8Encoding]::new($false))
+[IO.File]::WriteAllText($path, $text, [Text.UTF8Encoding]::new($true))
+```
+
+For source mode, apply the same conversion to `start_server_pc.ps1` if it reports encoding-related parser errors.
+
+#### `start_server_pc.ps1` is not recognized
+
+The script is in `pc_backend`, not `pc_backend\installer`. From the installer directory use:
+
+```powershell
+..\start_server_pc.ps1 -InstallDeps -Restart -DataDir "$env:USERPROFILE\SciTodayData" -Port 5200 -AuthToken $token
+```
+
+Or run `cd ..` first and then use `.\start_server_pc.ps1`.
+
+#### Admin login does nothing after entering `123456`
+
+The backend rejects an incorrect token with HTTP 401. `123456` works only if the backend was explicitly configured with that exact token. Use the token supplied during installation or generated for source startup.
+
+A packaged installation stores its effective token in the installation directory's `tray_config.env`:
+
+```text
+AuthToken=your-token-here
+```
+
+The default installation directory is usually `%LOCALAPPDATA%\Programs\SciTodayBackend`, unless a different directory was selected. Enter the exact value after `AuthToken=` in the Admin page and Android app. Use a long random token rather than `123456`.
+
+#### Admin opens, but SciToday is not installed as a Windows background app
+
+Starting `start_server_pc.ps1` proves the Flask backend works, but source mode does not install the tray app or configure startup automatically. To install those Windows integrations, build or download the release ZIP, extract it, and run the packaged `install.cmd`.
 
 ## Android APK
 
@@ -179,34 +259,19 @@ SciToday_logo.svg       项目 Logo
 
 ```powershell
 cd pc_backend
-py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-Copy-Item config.example.json config.json
-```
+Set-ExecutionPolicy -Scope Process Bypass -Force
+$token = [guid]::NewGuid().ToString("N")
+Write-Host "SciToday 访问 Token: $token"
 
-编辑 `config.json`：
-
-- `ai.api_key`：你的模型服务 API Key。
-- `ai.base_url` 和 `ai.model`：模型接口地址和模型名。
-- `rss.opml_path`：OPML 文件路径，例如 `$env:USERPROFILE\SciTodayData\feedly.opml`。
-- `server.auth_token`：用于 Web 控制台和 Android App 的长随机访问 Token。
-
-启动后端：
-
-```powershell
 .\start_server_pc.ps1 `
   -InstallDeps `
   -Restart `
   -DataDir "$env:USERPROFILE\SciTodayData" `
   -Port 5200 `
-  -AuthToken "<long-random-token>"
+  -AuthToken $token
 ```
 
-打开控制台：
-
-```text
-http://127.0.0.1:5200/admin/
-```
+源码模式需要保持终端窗口运行。打开 `http://127.0.0.1:5200/admin/`，输入上面实际生成的 Token；不要原样输入 `<long-random-token>`。
 
 ### 从 GitHub Release 安装
 
@@ -216,21 +281,89 @@ http://127.0.0.1:5200/admin/
 .\install.cmd
 ```
 
-Release 使用透明 ZIP 包，不再使用自解压 EXE 安装器。ZIP 更容易检查，也能减少未签名安装器被 Defender/SmartScreen 拦截的情况。
-
-如果 Windows 阻止托盘程序运行，可以解压 `payload.zip`，进入 `payload\backend`，直接启动后端：
-
-```powershell
-.\start_server_pc.ps1 -InstallDeps -Restart -DataDir "$env:USERPROFILE\SciTodayData" -Port 5200 -AuthToken "<long-random-token>"
-```
+Release ZIP 内含 `install.cmd`、`install.ps1` 和必需的 `payload.zip`。源码目录 `pc_backend\installer` 只是安装器源码，通常没有 `payload.zip`，因此不能直接在源码目录运行 `install.cmd`。
 
 ### 构建 Windows ZIP 安装包
 
+在仓库根目录执行：
+
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\pc_backend\installer\build_package.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\pc_backend\installer\build_package.ps1
 ```
 
-默认构建不会打包 Python wheel 缓存，而是在目标机器上联网安装依赖，减少 Python 版本不兼容问题。只有在确认目标环境和构建环境的 Windows x64/Python 版本一致时，才建议使用 `-IncludeWheelCache` 构建离线包。公开 Release 不再生成或上传自解压 EXE 安装器。
+构建结果位于：
+
+```text
+pc_backend\dist\SciToday-PC-Backend-V1.0.1.zip
+```
+
+解压这个生成的 ZIP，再运行其中的 `install.cmd`。默认构建会在目标机器联网安装 Python 依赖；只有确认目标环境和构建环境的 Windows x64/Python 版本一致时，才建议使用 `-IncludeWheelCache`。
+
+### Windows 安装故障排查
+
+#### 提示找不到 `payload.zip`
+
+说明正在源码目录运行安装脚本。请选择以下一种方式：
+
+1. 返回 `pc_backend`，使用 `start_server_pc.ps1` 从源码运行；或
+2. 先执行 `build_package.ps1`，解压 `pc_backend\dist` 中生成的 ZIP，再运行其中的 `install.cmd`；或
+3. 直接下载并解压 GitHub Release 提供的 PC 后端 ZIP。
+
+#### 提示脚本没有数字签名
+
+只对当前 PowerShell 进程临时放开策略：
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass -Force
+Unblock-File .\install.ps1
+Unblock-File .\install.cmd
+Unblock-File .\payload.zip
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -PayloadZip .\payload.zip
+```
+
+如果目录中没有 `payload.zip`，不要执行对应的 `Unblock-File`，应先按上一节构建或下载完整安装包。
+
+#### 出现 `UnexpectedToken`、意外的 `}`、`\dlmanager`、`tray_config.env` 或 JSON 语法错误
+
+这通常是 Windows PowerShell 5.1 把无 BOM 的 UTF-8 脚本按错误编码解析。优先使用 PowerShell 7：
+
+```powershell
+pwsh -NoProfile -File .\install.ps1 -PayloadZip .\payload.zip
+```
+
+没有 PowerShell 7 时，可先把脚本转换为带 BOM 的 UTF-8：
+
+```powershell
+$path = (Resolve-Path .\install.ps1).Path
+$text = [IO.File]::ReadAllText($path, [Text.UTF8Encoding]::new($false))
+[IO.File]::WriteAllText($path, $text, [Text.UTF8Encoding]::new($true))
+```
+
+源码启动脚本出现同类错误时，将 `start_server_pc.ps1` 用同样方式转换后再运行。
+
+#### 无法识别 `start_server_pc.ps1`
+
+该脚本在 `pc_backend`，不在 `pc_backend\installer`。如果当前位于 installer 目录，应执行：
+
+```powershell
+..\start_server_pc.ps1 -InstallDeps -Restart -DataDir "$env:USERPROFILE\SciTodayData" -Port 5200 -AuthToken $token
+```
+
+或者先执行 `cd ..`，再运行 `.\start_server_pc.ps1`。
+
+#### Admin 输入 `123456` 后“保存并登录”没有反应
+
+错误 Token 会被后端以 HTTP 401 拒绝。只有后端本身明确设置为 `123456` 时它才有效。安装版 Token 保存在安装目录的 `tray_config.env`：
+
+```text
+AuthToken=你的实际Token
+```
+
+默认安装目录通常是 `%LOCALAPPDATA%\Programs\SciTodayBackend`，自定义安装目录时以实际目录为准。将 `AuthToken=` 后面的完整内容填写到 Admin 和 Android App。建议使用随机长 Token，不要使用 `123456`。
+
+#### Admin 能打开，但没有安装为 Windows 后台
+
+`start_server_pc.ps1` 属于源码运行模式，只会启动 Flask 后端，不会自动完成托盘程序和开机自启安装。要安装完整 Windows 后台，请构建或下载 Release ZIP，解压后运行其中的 `install.cmd`。
 
 ### 安装 Android APK
 
